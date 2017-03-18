@@ -8,7 +8,7 @@ The package can be installed by adding `artsy` to your list of dependencies and 
 
 ```elixir
 def deps do
-  [{:artsy, "~> 0.1.0"}]
+  [{:artsy, "~> 0.1"}]
 end
 
 def application do

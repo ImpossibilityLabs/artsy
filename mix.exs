@@ -3,7 +3,7 @@ defmodule Artsy.Mixfile do
 
   def project do
     [app: :artsy,
-     version: "0.1.0",
+     version: "0.1.1",
      elixir: "~> 1.4",
      description: "Wrapper to use Artsy API to get artworks.",
      docs: [extras: ["README.md"]],
