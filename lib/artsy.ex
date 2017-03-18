@@ -3,6 +3,7 @@ defmodule Artsy do
   REST API wrapper for [Artsy](http://artsy.net).
   """
 
+  import Artsy.ApiHelpers
   use Application
   use GenServer
   use HTTPoison.Base
@@ -75,6 +76,24 @@ defmodule Artsy do
     GenServer.call(__MODULE__, {:artworks_reset})
   end
 
+  
+  @doc """
+  Get all artists from decoded JSON object.
+  Each call will call the next page with artists.
+  """
+  @spec artists() :: {:ok, map()} | {:error, Exception.t}
+  def artists() do
+    GenServer.call(__MODULE__, {:artists})
+  end
+  
+  @doc """
+  Get all artists for specific artwork.
+  """
+  @spec artists(:artwork, String.t) :: {:ok, map()} | {:error, Exception.t}
+  def artists(:artwork, artwork_id) do
+    GenServer.call(__MODULE__, {:artists_artwork, artwork_id})
+  end
+
 
   @doc """
   Load artworks.
@@ -83,10 +102,8 @@ defmodule Artsy do
   """
   def handle_call({:artworks}, _from, %{"token" => token} = state) when token != nil do
     url = Map.get(state, "next_artworks", "/artworks")
-    {result, new_state} = with {:ok, %{body: json_body, status_code: 200}} <-
-        Artsy.get(url, headers(:token, token)),
-      {:ok, response} <- Poison.decode(json_body)
-    do
+    raw_response = Artsy.get(url, headers(:token, token))
+    {result, new_state} = get_request state, raw_response, fn(state, response) ->
       new_state = case response do
         %{"_links" => %{"next" => %{"href" => next_url}}} ->
           Map.put(state, "next_artworks", String.replace(next_url, config(:url), ""))
@@ -94,32 +111,57 @@ defmodule Artsy do
           state
       end
       {{:ok, response}, new_state}
-    else
-      {:ok, %{status_code: 400}} ->
-        {{:error, Artsy.InvalidRequestData}, state}
-      {:ok, %{status_code: 401}} ->
-        {{:error, Artsy.NoSecurityHeader}, state}
-      {:ok, %{status_code: 406}} ->
-        {{:error, Artsy.UnsupportedAcceptType}, state}
-      {:ok, %{status_code: 409}} ->
-        {{:error, Artsy.NoApplication}, state}
-      {:ok, %{status_code: 500}} ->
-        {{:error, Artsy.ApiError}, state}
-      {:error, _} ->
-        {{:error, Artsy.ApiError}, state}
-      _ ->
-        {{:error, Artsy.GenericError}, state}
     end
-
     {:reply, result, new_state}
   end
 
   @doc """
-  Reset pagination for artworks
+  Reset pagination for artworks.
   """
   def handle_call({:artworks_reset}, _from, %{"next_artworks" => next_artworks} = state)
   when next_artworks != nil do
     {:reply, :ok, Map.drop(state, ["next_artworks"])}
+  end
+
+
+  @doc """
+  Load artists.
+  We save cursor in state for effective pagination, of next request.
+  Use artists_reset to reset a pagination cursor.
+  """
+  def handle_call({:artists}, _from, %{"token" => token} = state) when token != nil do
+    url = Map.get(state, "next_artists", "/artists")
+    raw_response = Artsy.get(url, headers(:token, token))
+    {result, new_state} = get_request state, raw_response, fn(state, response) ->
+      new_state = case response do
+        %{"_links" => %{"next" => %{"href" => next_url}}} ->
+          Map.put(state, "next_artists", String.replace(next_url, config(:url), ""))
+        _ ->
+          state
+      end
+      {{:ok, response}, new_state}
+    end
+    {:reply, result, new_state}
+  end
+
+  @doc """
+  Load artists for specific artwork.
+  """
+  def handle_call({:artists_artwork, artwork_id}, _from, %{"token" => token} = state) when token != nil do
+    url = "/artists?artwork_id=#{artwork_id}"
+    raw_response = Artsy.get(url, headers(:token, token))
+    {result, _state} = get_request state, raw_response, fn(state, response) ->
+      {{:ok, response}, state}
+    end
+    {:reply, result, state}
+  end
+
+  @doc """
+  Reset pagination for artists.
+  """
+  def handle_call({:artists_reset}, _from, %{"next_artists" => next_artists} = state)
+  when next_artists != nil do
+    {:reply, :ok, Map.drop(state, ["next_artists"])}
   end
 
 
